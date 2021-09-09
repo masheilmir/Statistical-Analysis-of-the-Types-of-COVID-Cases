@@ -1,0 +1,895 @@
+---
+title: "Determining Which is More Concerning: COVID-19 Outbreaks, Close-Contact Exposure, or Travel-Related Incidents"
+author: "Masheil Mir"
+date: June 18, 2021
+output:
+  pdf_document: default
+---
+
+```{r include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+library(openintro)
+library(tidyverse)
+library(dplyr)
+library(kableExtra)
+library(ggplot2)
+library(ggpubr)
+library(EnvStats)
+library(lme4)
+library(broom)
+```
+
+# Abstract
+
+COVID-19 has been an ongoing concern worldwide since 2019. This study aims to determine which is more concerning in Canada: COVID-19 Outbreaks, Close-Contact Exposure, or Travel-Related Incidents. The data obtained was filtered down to remove any cases that were not reported, resulting in only considering Ontario data. The variables of interest were determined and consist of the following: age, gender, hot spot health regions in Ontario, case status, and exposure type. To conduct further analysis, the difference in differences methodology was used to compare COVID-19 cases across the exposure types vs. case statuses. After computing the differences, we saw that recovered close-contact cases had the highest counts. Additionally, a multilevel linear regression model was used to determine significant factors for each exposure type. Through these models, we learned that each exposure type had different significant variables that contributed to case counts across hot spot regions in Ontario. These significant factors included recovered cases and the gender of individuals who contracted the virus being male. Through these findings, we were able to conclude that close-contact cases were of most concern, and the Government of Ontario should begin looking into different ways to ensure close-contact exposure is limited, beyond just a provincial lockdown.
+
+# Introduction
+
+COVID-19 has affected millions across the globe since March 2019. Canada itself is experiencing its third wave of the virus with new variants arising and increasing the spread. The government's main concern is to ensure the safety of millions of Canadians during this time and containing the virus [1]. Lockdowns, restrictions, and rapid vaccination roll outs have been in full effect in an attempt to slow down the spread. Unfortunately, the newest variant of the COVID-19 virus, the Delta variant, is now known to double the risk of hospitalization [2] when compared to previous variants. This variant is now apparent across some provinces in Canada, such as British Columbia [3] and Alberta [4]. Although previously not seen as a concern, this new research may constitute for a fourth wave, and perhaps even cause lockdown restrictions to become stricter, despite just being lifted in Ontario.
+
+Due to the airborne nature of the the COVID-19 virus (COVID), the emphasis on social distancing and wearing masks has been heightened since the global pandemic began. Thus, when looking at positive COVID cases, it is important to consider how a person was infected, and in return, determine what measures the government must take in order reduce the spread. They have been monitoring travel-related cases, and as a result have ceased all incoming flights from India and Pakistan [5] due to an increase in the number of COVID cases detected in passengers who arrived in Canada from these countries [6]. In addition, province wide lockdowns have come into affect after regional hotspots, such as Peel, York, and Toronto regions in Ontario continue to see higher case counts [7]. Additionally, there have been several workplace closures across Ontario due to outbreaks in local restaurants, warehouses, etc.. Ontario reported its first outbreak-related closure on April 23rd, 2021, at a McDonald's fast food restaurant, cosmetics store, and car dealership in Toronto [8].
+
+In order to allow readers to better understand the difference between the terminology, the below table has been created:
+
+```{r echo=FALSE}
+# Refer to citation [10], [11], [12]
+termDesc <- data.frame(Term = c("COVID-19",
+                                "Pandemic",
+                                "Outbreak",
+                                "Close-contact Exposure",
+                                "Travel-Related Incident"),
+                       Definition= c("COVID-19 is a disease caused by a new strain of coronavirus. CO stands for corona, V for virus, and D for disease. Formerly, this disease was referred to as ‘2019 novel coronavirus’ or ‘2019-nCoV.’",
+                                     "A pandemic is a global disease outbreak often caused by a new virus or a strain of virus that has not circulated among people for a long time. Humans usually have little to no immunity against it. The virus spreads quickly from person-to-person worldwide.", 
+                                     "An outbreak is a sudden rise in the number of cases of a disease. An outbreak may occur in a community or geographical area, or may affect several countries. It may last for a few days or weeks, or even for several years.",
+                                     "A close contact is generally someone who has been near a person with COVID-19 for at least 15 minutes when health and safety measures were not in place or were insufficient. This includes up to two days before someone develops symptoms.",
+                                     "An individual who has symptoms compatible with COVID-19 and traveled to, or from an affected area (including inside of Canada)."))
+
+# Refer to citation [13]
+kbl(termDesc, caption = "COVID-19 Relevant Terms") %>%
+  kable_material(full_width = F, position = "center", latex_options = "HOLD_position") %>%
+  column_spec(2, width = "25em")
+```
+
+It is imperative to consider all factors when looking at the mass spread of the virus. In essence, the government must consider factors such as regions and provinces with high case counts, date it was reported, how the spread occurred, age of those affected, gender, and the status of the respective cases to get a better perspective.
+
+This study will aim to answer the following research question: **What has a greater effect on the number of COVID-19 cases across Canada: travel-related incidents, outbreaks or close-contact exposure?** To explore this question, the age, gender, province, date it was reported, health region, exposure type, and case status of individuals will be analyzed. The data will be filtered down to look at cases in Ontario, British Columbia and Alberta. This is because Ontario currently holds the highest number of COVID cases across the country [9] and the new Delta variant is present in British Columbia and Alberta. Using these provinces will give a better outlook on how the country should proceed as a whole to reduce the spread of the virus.
+
+The hypothesis is that close-contact cases are of greatest concern as it is harder to ensure that individuals across the country will not interact with each other despite lockdown restrictions. However, when looking at travel-related incidents and outbreaks, they seem to be more easily contained by imposing travel restrictions and shutting down certain facilities.
+
+# Data
+
+## Data Background and Collection
+
+The data was retrieved through a COVID-19 Canada resource hub outlined in the appendix section of this report.
+
+The original data set contains 12 variables, with 11 of them being categorical and 1 being numerical. For this study, we will be focusing on 7 of the 11 categorical variables: health region, age group, gender, date it was reported, exposure type, case status and province.
+
+This data set is a compilation of multiple other data sets that were put together. Since we will be filtering the data set to hone in on the Ontario, British Columbia and Alberta data, we will outline where this particular information was retrieved from.
+
+The Ontario (ON) data was obtained from the Government of Ontario website [14]. This is an open source data set that compiles daily snapshots of publicly reported data testing for COVID-19 in Ontario. The data is provided by Public Health Units across the province, for example, the Durham Region Health Department, York Region Public Health, etc.. It includes age group, gender, date the case was reported, case information, Public Health Unit, and longitudes/latitudes of the region (note that the longitude/latitude is not for the individuals reported on, but rather the central longitude/latitude of the region). 
+
+The British Columbia (BC) data was obtained from the BC Centre for Disease control website [15]. It includes information on cases, recoveries, deaths, hospitalizations and testing. There are overlapping variables with the Ontario data, such as age group, cases reported to Public Health, date it was reported, recovery cases and gender.
+
+The Alberta (AB) data was obtained from the Government of Alberta's website [16]. The Government of Alberta obtains this data through the Provincial Surveillance Information system (PSI), which is a laboratory surveillance system that receives positive results for all Notifiable Diseases and diseases under laboratory surveillance from Alberta Precision Labs [16]. The data obtained includes case data, age group, gender, zones/public health units, recovery cases, and date it was reported. These are also variables that overlap with the BC and ON data sets.
+
+Although other province data is not being used, it is important to note that the rest of the data was obtained through the COVID-19 Canada Open Data Working Group [17]. This is an open source data set collected publicly and updated through a spreadsheet including variables such as cases, age, gender, health region, and case information.
+
+CSV's were extracted by the publisher for all of these data sets and then linked together to form this larger data set that is being used in this study.
+
+The drawbacks and limitations of this data set is that it does not delve into several other reasons that could result in individuals contracting the virus. One factor that would be interesting and important to have considered is race. Race has played a large factor in the demographic of those being infected by the virus. According to the Centers for Disease Control and Prevention (CDC), non-Hispanic Black people and Hispanic or Latino people were 4.7 times more likely to have been hospitalized as a result of testing positive for COVID when compared to non-Hispanic white people [18]. Although there is no direct evidence, it is believed that this is because people of colour are more susceptible to having underlying health conditions [18] and in return, COVID targets those have weaker immune systems. There is no data on if any of these individuals have underlying health conditions or what their racial backgrounds are, thus we are only able to make generalized conclusions off of the data provided without granular details.
+
+Another drawback of this data set is that it does not include vaccination data, which plays a large role in whether or not individuals may recover once they have the virus. Although being vaccinated does not guarantee immunity, it does increase the chances of an individual recovering. 
+
+Lastly, this dataset does not include case information from the beginning of the COVID-19 pandemic. Although the dates range from March 2020 to June 2021, there were cases prevalent that were not integrated into the data set. Thus, this may also result in inaccuracies that cannot be accounted for.
+
+Despite these drawbacks, the data still contains important and useful information that will aid in this study, and thus we will continue to use it for further analysis.
+
+## Data Cleansing
+
+```{r include=FALSE}
+covid_data <- read.csv('FullCovidData.csv') 
+
+select_cols <- select(covid_data, date_reported, health_region, age_group, gender, exposure, case_status, province)
+
+select_cols$date_reported <- as.Date(select_cols$date_reported, format="%Y/%m/%d %H:%M:%S")
+
+filtered_data <- filter(select_cols, province == 'Ontario' | 
+                 province == 'Alberta' | 
+                 province == 'British Columbia')
+  
+subset_data <- subset(filtered_data,  age_group != "Not Reported" &
+                    gender != "Not Reported" &
+                    exposure != "Not Reported" &
+                    case_status != "Not Reported")
+
+ON_data <- filter(subset_data, health_region == 'Toronto Public Health' |
+                   health_region == 'Peel Public Health' |
+                    health_region == 'York Region Public Health Services' |
+                    health_region == 'Durham Region Health Department' |
+                    health_region == 'Halton Region Health Department' |
+                    health_region == 'Hamilton Public Health Services' |
+                    health_region == 'Niagara Region Public Health Department' |
+                    health_region == 'Simcoe Muskoka District Health Unit' |
+                    health_region == 'Region of Waterloo, Public Health' |
+                    health_region == 'Wellington-Dufferin-Guelph Public Health' |
+                    health_region == 'Windsor-Essex County Health Unit' | 
+                    health_region == 'Ottawa Public Health')
+
+ON_data <- select(ON_data, -province)
+
+# outbreak data
+outbreak_data <- ON_data %>% filter(ON_data$exposure == "Outbreak")
+na.omit(outbreak_data)
+
+#close contact data
+close_contact_data <- ON_data %>% filter(ON_data$exposure == "Close Contact")
+na.omit(close_contact_data)
+
+#travel related data
+travel_related_data <- ON_data %>% filter(ON_data$exposure == "Travel-Related")
+na.omit(travel_related_data)
+
+#write_csv(ON_data, "ON_data.csv")
+```
+In order to ensure that the data is clean and free of unwanted variables and values, the following steps were performed:
+
+1. After reading in the data, unnecessary variables such as Object ID, row ID, date reported, latitude, longitude, and province abbreviations were removed from the data set, thus leaving only the following variables: health region, age group, gender, date reported, exposure type, case status, and province.
+2. After selecting the desired columns, it was important to ensure that all the variable types were as wanted. The date column was converted from a variable being read into the data as a character into a date.
+3. All entries in age group, gender, exposure type, and case status that were "Not Reported" were treated as "NA's" in the data, and thus were removed. This is because this study is dependent on having these variables to determine which exposure type, given age, case status and gender, is of most concern. It is important to note that performing such filtering resulted in all cases from British Columbia and Alberta being removed, leaving only data for Ontario.
+4. Since the data only consisted of Ontario cases, the province column was removed as it is now obsolete and does not provide significant information (because we know all of the cases are from Ontario). The new variables of interest are now the following: date reported, health region, age group, gender, exposure, and case status.
+5. To make the data more valuable and hone in on regions of interest, the health region column was further filtered down into hotspot regions in Ontario. In this data set they are the following: Toronto Public Health, Peel Public Health, York Region Public Health Services, Durham Region Health Department, Halton Region Health Department, Hamilton Public Health Services, Niagara Region Public Health Department, Simcoe Muskoka District Health Unit, Region of Waterloo Public Health, Wellington-Dufferin-Guelph Public Health, Windsor-Essex County Health Unit and Ottawa Public Health.
+6. Finally, since we want to make comparisons between the exposure type of the individuals, three new data frames will be created and sorted by exposure type for later analysis.
+
+Since the data cleansing is complete, we can now move onto giving a complete breakdown of the variables in the data frame alongside important characteristics. This will allow us to see the significance of the variables we are using in the study.
+
+## Data Description
+```{r echo=FALSE}
+dataDesc <- data.frame(Variable = c("Health Region",
+                                    "Age Group",
+                                    "Gender",
+                                    "Exposure Type",
+                                    "Case Status",
+                                    "Date Reported"),
+                       Type = c("Categorical",
+                                "Categorical", 
+                                "Categorical", 
+                                "Categorical", 
+                                "Categorical",
+                                "Categorical"),
+                       Description = 
+                         c("This variable represents the public health region that reported the case. It consists of several health regions, for example Peel Public Health or Toronto Public Health",
+                           "This variable outlines the age group of the individual that has tested positive for COVID-19. It ranges from ages >20 and increments in intervals of 10 (20-29, 30-39, etc.) up to ages 80+. For example, if the person who contracted the virus was 87, they would be classified under the 80+ category, whereas if someone who was 34 contracted the virus, they would fall under the 30-39 age category.",
+                           "This variable represents whether the individual identifies as a male or female. It only has two options, thus the response given is either female or male.",
+                           "This variable describes how the individual contracted the virus. It consists of three options: outbreak, close-contact, and travel-related. For example, if a person travelled abroad and came back to Canada and tested positive for COVID, their exposure type would be classified as travel-related.",
+                           "This variable describes the case status of an individual who contracted the COVID-19 virus. The three options for this variable are: recovered, deceased, and active. For example, if someone had COVID and they have been isolating for 14 days and no longer have symptoms, they are recovered",
+                           "This variable outlines the date that the case was reported to the health region. It consits of dates from January 1st, 2020 to June 2nd, 2021."))
+
+kbl(dataDesc, caption = "Variable Descriptions") %>%
+  kable_material(full_width = F, position = "center", latex_options = "HOLD_position") %>%
+  column_spec(3, width = "25em")
+```
+
+Since these are categorical variables, we can assign numerical values to each "group" within each variable and conduct numerical summaries. We can then tie those back to the original data set to make our inferences. In the tables below, the different bins for the categorical variables in the data set have been created and explained for clarity.
+
+```{r include=FALSE}
+# Numerical summary prelim steps
+
+#create variables to manipulate for numerical summaries
+date <- ON_data$date_reported
+region <- ON_data$health_region
+age <- ON_data$age_group
+gender_var <- ON_data$gender
+exposure_type <- ON_data$exposure
+status <- ON_data$case_status
+
+# Assigning numerical values in order to do numerical summaries
+rv <- region
+region <- as.numeric(factor(rv))
+#levels(factor(region))
+
+rv <- age
+#levels(factor(rv))
+age <- as.numeric(factor(rv))
+
+# assigning weights for binary data
+gender_var <- ifelse(gender_var == "Male", 1, 0)
+
+rv <- exposure_type 
+#levels (factor(rv))
+exposure_type <- as.numeric(factor(rv))
+
+rv <- status
+#levels(factor(rv))
+status <- as.numeric(factor(rv))
+```
+
+The following table represents the numerical values that will be tied to the hotspot health regions in Ontario. The values range from 1 to 12 and will be used to create numerical summaries of the data.
+
+\newpage
+```{r echo=FALSE}
+# Health Region table
+health_tibble_variable <- tibble(c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"), c("Durham Region Health Department", "Halton Region Health Department","Hamilton Public Health Services", "Niagara Region Public Health Department", "Ottawa Public Health", "Peel Public Health", "Region of Waterloo, Public Health", "Simcoe Muskoka District Health Unit", "Toronto Public Health", "Wellington-Dufferin-Guelph Public Health", "Windsor-Essex County Health Unit","York Region Public Health Services"))
+kable(caption = "Health Region Numerical Representation", health_tibble_variable, "pipe", col.names = c("Data Set Value", "Health Region"))
+```
+
+The next table represents the numerical values that will be tied to the age group that individuals who tested positive for COVID belong to, in Ontario. The values range from 1 to 8 and will be used to create numerical summaries of the data.
+```{r echo=FALSE}
+#age group table
+age_tibble_variable <- tibble(c("1", "2", "3", "4", "5", "6", "7", "8"), c("<20", "20-29", "30-39", "40-49", "50-59", "60-69", "70-79", "80+"))
+kable(caption = "Age Group Numerical Representation", age_tibble_variable, "pipe", col.names = c("Data Set Value", "Age Group"))
+```
+
+The next table represents the numerical values that will be tied to the exposure type of individuals who tested positive for COVID in Ontario. The values range from 1 to 3 and will be used to create numerical summaries of the data.
+```{r echo=FALSE}
+#exposure type table
+exposure_tibble_variable <- tibble(c("1", "2", "3"), c("Close Contact", "Outbreak", "Travel-Related"))
+kable(caption = "Exposure Type Numerical Representation", exposure_tibble_variable, "pipe", col.names = c("Data Set Value", "Exposure Type"))
+```
+
+The next table represents the numerical values that will be tied to the case status of individuals who tested positive for COVID in Ontario. The values range from 1 to 3 and will be used to create numerical summaries of the data.
+```{r echo=FALSE}
+#case status table
+case_tibble_variable <- tibble(c("1", "2", "3"), c("Active", "Deceased", "Recovered"))
+kable(caption = "Case Status Numerical Representation", case_tibble_variable, "pipe", col.names = c("Data Set Value", "Case Status"))
+```
+
+Now that our variables are identified and explained, we can proceed with creating meaningful summaries. These summaries will provide important insight that will aid on our analysis and model creation.
+
+## Numerical Summaries and Plots
+
+Below we have obtained numerical summaries that will include the center and spread of variable. The center and spread includes the following values that will also be calculated as a result: mean, median, mode, standard deviation, interquartile range (IQR), minimum and maximum. It is important to note that not all of the values make sense with our variables as they are categorical, thus only relevant information will be displayed in the plots tables below.
+
+**a. Date Reported**
+
+```{r echo = FALSE}
+ggplot(ON_data) + 
+  aes(x= date_reported) + 
+  geom_bar(alpha=0.3, fill="navy") + 
+  ggtitle("Plot 1: Count of Cases Based on Date Reported") + 
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  xlab("Date") + ylab("Number of Cases") + scale_x_date(date_breaks = "2 month", date_labels = "%Y-%m")
+```
+When looking at *Plot 1*, the count of cases by date, it is interesting to see that the number of cases are more than double what they were at the beginning of the pandemic (March 2020). It seems that the spike in cases began after September 2020 and reached a high in January 2021, despite the lockdown order being in place since October 7th, 2020 [26]. The dip in the number of cases is seen in February 2021, which was shortly follow by an all time high in case counts in April 2021. This drastic increase in cases resulted in another lockdown that was placed on April 7th, 2021 [26] with stricter restrictions than lockdowns that had been in place previously. Since the lockdown came into effect, we can see a somewhat rapid decline in the number of cases. From this graph we can safely see the effectiveness of lockdown orders and how they have helped keep case counts down.
+
+**b. Health Region**
+
+```{r echo = FALSE}
+mean_health_region <- mean(region)
+median_health_region <- median(region)
+max_health_region <- max(region)
+min_health_region <- min(region)
+sd_health_region <- sd(region)
+iqr_health_region <- iqr(region)
+
+health_region_numsum <- tibble(c("Mean",
+                                 "Median",
+                                 "Min",
+                                 "Max",
+                                 "Standard Deviation",
+                                 "Interquartile Range"), 
+                               c(mean_health_region,
+                                 median_health_region,
+                                 min_health_region,
+                                 max_health_region,
+                                 sd_health_region,
+                                 iqr_health_region))
+kable(caption = "Health Region Numerical Summary", health_region_numsum, "pipe", col.names = c("Numerical Measure", "Health Region"))
+```
+
+The table above shows the categorical results of the health region in which individuals tested positive for COVID-19. We will only be focusing on the mean for this variable since the rest of the values do not provide relevant information for the study. Notice that the mean for health region is **`r mean_health_region`**. Since this is not actually representing numerical data, we can round this to 7.00. If we reference *Table 4*, notice that the value 7 represents Region of Waterloo, Public Health. This means that the Region of Waterloo, Public Health has reported more cases than the other regions. The standard deviation value tells us that the data is spread out by **`r sd_health_region`** standard deviations. The standard deviation is relatively low, thus we can safely conclude that the overall data is close to the mean. The Interquartile Range, **`r iqr_health_region`** represents how spread out the middle 50% of the data points are. Overall, the Region of Waterloo is one that should be of most concern when the government begins to hone in on hotsopt regions in Ontario.
+
+**c. Age Group**
+```{r echo = FALSE}
+mean_age_group <- mean(age)
+median_age_group <- median(age)
+max_age_group <- max(age)
+min_age_group <- min(age)
+sd_age_group <- sd(age)
+iqr_age_group <- iqr(age)
+
+age_group_numsum <- tibble(c("Mean",
+                                 "Median",
+                                 "Min",
+                                 "Max",
+                                 "Standard Deviation",
+                                 "Interquartile Range"), 
+                               c(mean_age_group,
+                                 median_age_group,
+                                 min_age_group,
+                                 max_age_group,
+                                 sd_age_group,
+                                 iqr_age_group))
+kable(caption = "Age Group Numerical Summary", age_group_numsum, "pipe", col.names = c("Numerical Measure", "Age Group"))
+```
+
+The table above shows the categorical results of the Age Group of individuals who have tested positive for COVID-19. The min and max values represent the minimum and maximum age of the individuals, with **`r min_age_group`** representing the age group of 20 years old or younger and **`r max_age_group`** representing the age group 80 years old and older, respectively. Looking at the mean value, which is not actually representing numerical data, we see that it is **`r mean_age_group`**. We can round this number down to 3.00. If we reference *Table 5*, notice that the value 3 represents individuals between the age of 30-39. This means that the majority of individuals that tested positive were in the age range of approximately 30 to 39 years old. The standard deviation value tells us that the data is spread out by **`r sd_age_group`** standard deviations. The standard deviation is relatively low, thus we can say that the overall data is close to the mean. The Interquartile Range, **`r iqr_age_group`** represents how spread out the middle 50% of the data points are. Overall, the age group of most concern can be concluded to be those aged 30-39 years old.
+
+\newpage
+
+**d. Gender**
+
+```{r echo=FALSE}
+# reference [20]
+# removes scientific notation from y axis
+options(scipen = 999)
+
+ggplot(ON_data) + 
+  aes(x=gender) + 
+  geom_bar(alpha=0.3, fill="navy") + 
+  ggtitle("Plot 2: Cases by Gender") + 
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  xlab("Gender") + ylab("Number of Cases")
+
+```
+Looking at *Plot 2: Cases by Gender*, we can see the difference between males and females that tested positive for COVID-19. We can see that the female case count seems to be greater than the male case count. That being said, this graph does not provide significant information other than what has already been mentioned and seen from the above, but it can be paired with the rest of our data to possibly provide important insight.
+
+**e. Exposure Type**
+```{r echo = FALSE}
+mean_exposure <- mean(exposure_type)
+median_exposure <- median(exposure_type)
+max_exposure <- max(exposure_type)
+min_exposure <- min(exposure_type)
+sd_exposure <- sd(exposure_type)
+iqr_exposure <- iqr(exposure_type)
+
+exposure_numsum <- tibble(c("Mean",
+                                 "Median",
+                                 "Min",
+                                 "Max",
+                                 "Standard Deviation",
+                                 "Interquartile Range"), 
+                               c(mean_exposure,
+                                 median_exposure,
+                                 min_exposure,
+                                 max_exposure,
+                                 sd_exposure,
+                                 iqr_exposure))
+kable(caption = "Exposure Type Numerical Summary", exposure_numsum, "pipe", col.names = c("Numerical Measure", "Exposure Type"))
+```
+
+The table above shows the categorical results of the Exposure Type of individuals that have tested positive for COVID-19. Since these numbers are referencing 1 of 3 types, 1 being Close Contact exposure, 2 being exposure by an Outbreak, and 3 being travel related exposure (refer to *Table 6* in the Data Description section), we can see that close-contact cases make up majority of the data. This is derived from the numerical mean which is  **`r mean_exposure`**. Rounding this down to 1, and referencing *Table 6* gives us the prior conclusion. This aligns with our hypothesis as travel restrictions have been in place for the majority of the pandemic and exposure by outbreaks are not as common since many communities have had appropriate safety measures in place to reduce the chances of a communal outbreaks. On the contrary, it is harder to control a population from socializing despite lockdowns, and thus this value seems to give significant insight. The standard deviation value tells us that the data is spread out by **`r sd_exposure`** standard deviations. The standard deviation is relatively low, thus we can say that the overall data is close to the mean. The Interquartile Range, **`r iqr_exposure`** represents how spread out the middle 50% of the data points are. 
+
+**f. Case Status**
+```{r echo = FALSE}
+mean_status <- mean(status)
+median_status <- median(status)
+max_status <- max(status)
+min_status <- min(status)
+sd_status <- sd(status)
+iqr_status <- iqr(status)
+
+status_numsum <- tibble(c("Mean",
+                                 "Median",
+                                 "Min",
+                                 "Max",
+                                 "Standard Deviation",
+                                 "Interquartile Range"), 
+                               c(mean_status,
+                                 median_status,
+                                 min_status,
+                                 max_status,
+                                 sd_status,
+                                 iqr_status))
+kable(caption = "Case Status Numerical Summary", status_numsum, "pipe", col.names = c("Numerical Measure", "Case Status"))
+```
+
+The table above shows the categorical results of the case statuses of individuals that have tested positive for COVID-19  Since these numbers are referencing 1 of 3 types, 1 being Active Cases, 2 being Deceased, and 3 Individuals that have recovered, (refer to *Table 7* in the Data Description section), we can see that most of the individuals who tested positive for COVID-19 recovered. This is derived from the numerical mean which is  **`r mean_status`**. Rounding this value up to 3 and referencing *Table 7* gives us the prior conclusion. This value is not surprising since most cases are not usually active for a prolonged period of time and the chances of death are not as common for the average age group we have discussed above (30-39). The standard deviation value tells us that the data is spread out by **`r sd_status`** standard deviations. The standard deviation is relatively low, thus we can say that the overall data is close to the mean. The Interquartile Range, **`r iqr_status`** represents how spread out the middle 50% of the data points are. 
+
+These numerical summaries alone only provide some insight on the variables. To further our analysis and delve deeper into the data, we will be conducting Difference in Differences analysis between the three exposure types
+
+# Methods
+
+## Difference in Differences
+
+The Difference in Differences method will be used to further analyze the data. The number of cases per exposure type cases based on their status will be compared using the following steps:
+
+1. From the data set, we will sum all the cases based on exposure type and case status. For example, all recovered outbreak cases will be summed, recovered travel related cases, recovered close contact cases, etc., until the sums for 3 categories for both variables are satisfied.
+
+2. Next, we will compute the differences for each of these sums. For example, the recovered outbreak sum will be compared to the active outbreak sum to determine the difference between both of these values. This value with tell us which case count is greater and of more concern. This will be done for all 9 sums generated. The 9 sums generated are as follows:
+a. Recovered Outbreak Sum
+b. Active Outbreak Sum
+c. Deceased Outbreak Sum
+d. Recovered Travel Related Sum
+e. Active Travel Related Sum
+f. Deceased Travel Related Sum
+g. Recovered Close Contact Sum
+h. Active Close Contact Sum
+i. Deceased Close Contact Sum
+
+3. Now we can calculate the average overall difference between all of the exposures by case status. This entails taking the differences computed in step 2, grouping them by exposure type, and averaging the differences of each exposure type individually. For example, the Outbreak differences will be averaged independently of the Travel-Related and Close-Contact cases.
+
+4. Then, we will compute the difference within these differences. We will take the difference values calculated in step 2 above and compare them to each other to determine the differences between those differences. For example, we will take the difference value of recovered outbreak cases vs. the active outbreak cases computed in step 2, and subtract that with the difference of the recovered close contact cases vs. active close contact cases also computed in step 2. This will allow us to find the differences between the exposure cases whose status is active, recovered, or deceased to determine which exposure type is prevalent.
+
+5. Next, we can compute the average for the difference in differences to obtain the average difference between cases by exposure type. This, again, entails calculating the differences independent of each other. 
+
+5. Finally, we can take the average difference values found and subtract the difference of differences values. This will provide us with the final average difference values we want.
+
+It is imperative to understand that all differences and averages are estimates that are being used to validate the hypothesis presented in the introduction section of this report. We hypothesized that close-contact cases are of greatest concern as it is harder to ensure that individuals across the country will not interact with each other despite lockdown restrictions. We are using case statuses to determine which exposure type is the most relevant in each status, as that will help us see how most exposure type cases affect individuals.
+
+Our parameters of interest include Exposure Type and Case Status as these are the variables we will be using to delve further into the difference in differences analysis. The steps outlined above will ensure that we obtain an appropriate difference in differences value that will allow us to determine which exposure type, related to case statuses, is of most concern. 
+
+To find the significant values that affect exposure types, we will revisit the following variables: age group, health region, and gender, on top of exposure type and case status. We will build an ordinary least squares (OLS) model with these dummy variables to aid with determining significance. In specific, we will take the exposure-specific data sets created in the data cleansing section, and build the model. For example, we will run the OLS model on the outbreak data set and determine which factors are significantly affecting this exposure type (this will be repeated for all 3 exposure types). The significant values will come from the estimates generated by the model, and they will further be analyzed and presented in order to reach a conclusion.
+
+That being said, we must ensure that the parallel trends assumption, alongside a few other assumptions are met in order to conduct the difference in differences methodology. 
+
+## Assumptions
+
+**a. Parallel Trends**
+
+The parallel trends assumption says that even though treatment and comparison groups may have different outcomes before the treatment begins, the trends should be the same or close to each other before the treatment begins. It is important to note that parallel trends cannot be proven, but instead they are determined by how much the reader is convinced by it.
+
+The comparison group we are using for the data set is exposure type. Before introducing the exposure type, individuals who test positive for COVID-19 usually have the same symptoms. Some of the symptoms include fevers, chills, cough, difficulty of breathing, etc. [27].  This means that the trends apparent in COVID-19 patients are consistent to each other before the comparison groups are considered. Therefore, we can conclude that the parallel trends assumption is met. 
+
+**b. Additional Assumptions**
+
+A few other assumptions that can be made are the following:
+
+1. Are there factors that have only affected one specific group of people and not another? This may be likely given the exposure type of the cases and where an individual contracted the virus.
+
+2. How likely is it that everybody was infected the same way? This is very unlikely as many people contracted the disease in various ways, and it is not only limited to the exposure groups we have in our data set.
+
+3. How do we know who was vaccinated and who was not? A way to look at this is by creating an assumption. The assumption could be that the cases for those aged 60+ after January 2021 received the vaccine, whereas all age groups before January 2021 did not, since the vaccine was not available to Canadian residents until January 2021.
+
+Since the parallel trends assumption holds and we have outlined a few other assumptions that are being made, we can now create and present the model that will aid us in determining significant factors.
+
+## Model
+
+Using the difference in differences method required us to ensure that certain assumptions were met so we could use the appropriate model. Initially, the Ordinary Least Squares (OLS) model seemed like it would be the most appropriate as well as simplest model to use, but due to some of the assumptions made, we decided to use a Multiple Level Regression (MLS) instead. This is because OLS only compares a dependent variable given changes in some other variables, but our variables of interest are not solely dependent on one other variable. For example, exposure type may vary by region, cases may vary by region, age groups may vary by region, case counts may vary by age and exposure type, etc.. Therefore, it makes more sense to use a MLS model as it will consider the effect of multiple variables on our variable of interest.
+
+Below is a breakdown of the MLS model with a multilevel random intercept. We have also provided a detailed overview of the Level 1 and Level 2 models.
+
+Level 1:
+
+$$ Y_{ij} = \beta_{0j} + \beta_1  x_{gender}  + \beta_2  x_{case status}$$
+Level 2: 
+
+$$ \beta_{01} = r_{01} + r_{01}  \mathcal{W}_{1} + u_{01} $$
+$$ \beta_{02} = r_{02} + r_{02}  \mathcal{W}_{2} + u_{02} $$
+The terms in the model are the following:
+
+Level 1 Terms:
+
+- $Y_{ij}$ is the health region.
+
+- $\beta_{0j}$ is the intercept which will be the age group variable.
+
+- $\beta_1$ is the slope of the gender variable
+
+- $\beta_2$ is the slope of the case status variable
+
+Level 2 Terms:
+
+- $\beta_{01}$: Intercept of Exposure Type by Case Status
+
+- $\beta_{02}$: Intercept of Exposure Type
+
+- $r_{0i} \qquad i \subset [1, 2]$: Intercept of the intercepts of each exposure type
+
+- $\mathcal{W}_{i} \qquad i \subset [1, 2]$: Weight
+
+- $u_{0i} \qquad i \subset [1, 2]$: Error term with respect to each exposure type
+
+In this model, the significant factors that affect health regions based on exposure type will be analyzed and discussed in the results and conclusion. Additionally, with the model, parameters of interest, assumptions and differences in differences methodology explained, the results of the methods can now be shown.
+
+# Results 
+
+## Difference in Differences
+
+Using the difference in differences method and the steps outlines above, the treatment groups will be split by the following:
+
+1. Case status based on exposure type
+2. Exposure type based on case status
+
+Below are the results of the steps used to calculated the differences using this methodology:
+
+```{r echo=FALSE}
+#difference in differences
+recovered_outbreak_sum <- sum(ON_data$exposure == "Outbreak" &
+                                    ON_data$case_status == "Recovered")
+active_outbreak_sum <- sum(ON_data$exposure == "Outbreak" & 
+                                 ON_data$case_status == "Active")
+deceased_outbreak_sum <- sum(ON_data$exposure == "Outbreak" & 
+                                   ON_data$case_status == "Deceased")
+
+recovered_travel_sum <- sum(ON_data$exposure == "Travel-Related" &
+                                  ON_data$case_status == "Recovered")
+active_travel_sum <- sum(ON_data$exposure == "Travel-Related" &
+                               ON_data$case_status == "Active")
+deceased_travel_sum <- sum(ON_data$exposure == "Travel-Related" &
+                                 ON_data$case_status == "Deceased")
+
+recovered_contact_sum <- sum(ON_data$exposure == "Close Contact" & 
+                                   ON_data$case_status == "Recovered")
+active_contact_sum <- sum(ON_data$exposure == "Close Contact" &
+                                ON_data$case_status == "Active")
+deceased_contact_sum <- sum(ON_data$exposure == "Close Contact" & 
+                                  ON_data$case_status == "Deceased")
+
+# sum tables
+outbreak_differences <- data.frame(Status = c("Recovered",
+                                     "Active",
+                                     "Deceased"),
+                      Count = c(recovered_outbreak_sum,
+                        active_outbreak_sum,
+                        deceased_outbreak_sum))
+kbl(outbreak_differences, caption = "Outbreak Cases Based on Status", booktabs = T) %>%
+  kable_classic(full_width = F, position = "center",  latex_options = "HOLD_position") %>% 
+  column_spec(2, width = "25em")
+
+close_contact_differences <- data.frame(Status = c("Recovered",
+                                     "Active",
+                                     "Deceased"),
+                      Count = c(recovered_contact_sum,
+                        active_contact_sum,
+                        deceased_contact_sum))
+kbl(close_contact_differences, caption = "Close-Contact Cases Based on Status", booktabs = T) %>%
+  kable_classic(full_width = F, position = "center",  latex_options = "HOLD_position") %>% 
+  column_spec(2, width = "25em")
+
+travel_differences <- data.frame(Status = c("Recovered",
+                                     "Active",
+                                     "Deceased"),
+                      Count = c(recovered_travel_sum,
+                        active_travel_sum,
+                        deceased_travel_sum))
+kbl(travel_differences, caption = "Travel-Related Cases Based on Status", booktabs = T) %>%
+  kable_classic(full_width = F, position = "center",  latex_options = "HOLD_position") %>% 
+  column_spec(2, width = "25em")
+
+```
+
+The above tables give the sums of the cases statuses, grouped by exposure type. By just looking at these tables, we can see that *Table 12: Close Contact Cases Based on Status* seems to have the highest number of cases in total, as well as recovered and active, whereas *Table 11: Outbreak Cases Based on Status* seems to have the highest number of deceased cases. Overall, *Table 13: Travel Relates Cases Based on Status* seems to have the lowest counts of all three tables.
+
+To further analyze the values, we will delve into the difference values.
+
+```{r include=FALSE}
+# initial differences
+outbreak_recov_act_diff <- recovered_outbreak_sum - active_outbreak_sum # more ppl recovered
+outbreak_recov_dec_diff <- recovered_outbreak_sum - deceased_outbreak_sum # more ppl recovered
+outbreak_act_dec_diff <- active_outbreak_sum - deceased_outbreak_sum # more ppl died
+
+contact_recov_act_diff <- recovered_contact_sum - active_contact_sum # more ppl recovered
+contact_recov_dec_diff <- recovered_contact_sum - deceased_contact_sum # more ppl recovered
+contact_act_dec_diff <- active_contact_sum - deceased_contact_sum # more ppl active
+
+travel_recov_act_diff <- recovered_travel_sum - active_travel_sum # more ppl recovered
+travel_recov_dec_diff <- recovered_travel_sum - deceased_travel_sum # more ppl recovered
+travel_act_dec_diff <- active_travel_sum - deceased_travel_sum # more ppl died
+
+avg_diff_outbreak <- (outbreak_recov_act_diff + outbreak_recov_dec_diff + outbreak_act_dec_diff)/3
+avg_diff_contact <- (contact_recov_act_diff + contact_recov_dec_diff + contact_act_dec_diff)/3
+avg_diff_travel <- (travel_recov_act_diff + travel_recov_dec_diff + travel_act_dec_diff)/3
+
+avg_diff_exp_case <- (avg_diff_travel + avg_diff_contact + avg_diff_outbreak)/3
+```
+
+The difference values for each case status type can be found in the Appendix section of this report. It is important to note that if we have positive values, that means the count for the case status mentioned first is higher than what it is being compared to. **Tables 17-19** in the appendix section include the tables that we will be analyzing below.
+
+To begin, if we refer to *Table 17* in the appendix section, we will see that it shows us that the recovered outbreak cases were greater than the active outbreak cases by **`r outbreak_recov_act_diff`** cases and greater than deceased outbreak cases by **`r outbreak_recov_dec_diff`**, but deceased outbreak cases were greater than active outbreak cases by **`r outbreak_act_dec_diff`** cases. The average difference between the outbreak cases is **`r avg_diff_outbreak`**. This value tells us that the recovered outbreak cases outweigh the deceased and active outbreak cases.
+
+Next, if we refer to *Table 18* in the appendix section, we will see that it shows us that the recovered close-contact cases were greater than the active close-contact by **`r contact_recov_act_diff`** cases and were greater than deceased close-contact cases by **`r contact_recov_dec_diff`** cases. Additionally, active close-contact cases cases were greater than active close-contact cases by **`r contact_act_dec_diff`**. The average difference between the close-contact cases is **`r avg_diff_contact`**. This value tells us that the recovered close-contact cases outweigh the deceased and active close-contact cases.
+
+Finally, if we refer to *Table 19* in the appendix section, we will see that it shows us that the recovered travel-related cases were greater than the active travel-related by **`r travel_recov_act_diff`** cases and were greater than deceased travel-related cases by **`r travel_recov_dec_diff`** cases. Additionally, deceased travel-relate cases cases were greater than active travel-related cases by **`r travel_act_dec_diff`**. The average difference between the travel-related cases is **`r avg_diff_travel`**. This value tells us that the recovered travel-related cases outweigh the deceased and active travel-relate cases.
+
+Overall, the average difference between the case statuses based on exposure type difference is **`r avg_diff_exp_case`**. Since this is a positive value, we can see that the recovered cases still outweigh the other case status types.
+
+Next, we can delve into the difference values of the differences computed above. This will allow us to see which exposure type had the most prominent number of cases in each difference.
+
+```{r include=FALSE}
+#difference of differences
+outbreak_contact_recov_act_diff <- outbreak_recov_act_diff - contact_recov_act_diff # more contact cases
+outbreak_contact_recov_dec_diff <- outbreak_recov_dec_diff - contact_recov_dec_diff # more contact cases
+outbreak_contact_act_dec_diff <- outbreak_act_dec_diff - contact_act_dec_diff # more active cases
+
+outbreak_travel_recov_act_diff <- outbreak_recov_act_diff - travel_recov_act_diff # more outbreak
+outbreak_travel_recov_dec_diff <- outbreak_recov_dec_diff - travel_recov_dec_diff # more outbreak
+outbreak_travel_act_dec_diff <- outbreak_act_dec_diff - travel_act_dec_diff  # more travel
+
+contact_travel_recov_act_diff <- contact_recov_act_diff - travel_recov_act_diff # more contact
+contact_travel_ecov_dec_diff <- contact_recov_dec_diff - travel_recov_dec_diff # more contact
+contact_travel_act_dec_diff <- contact_act_dec_diff - travel_act_dec_diff # more contact
+
+outbreak_contact_diff <- (outbreak_contact_recov_act_diff + outbreak_contact_recov_dec_diff + outbreak_contact_act_dec_diff)/3
+outbreak_travel_diff <- (outbreak_travel_recov_act_diff + outbreak_travel_recov_dec_diff + outbreak_travel_act_dec_diff)/3
+contact_travel_diff <- (contact_travel_recov_act_diff + contact_travel_ecov_dec_diff + contact_travel_act_dec_diff)/3
+
+avg_diff_exp <- (outbreak_contact_diff + outbreak_travel_diff + contact_travel_diff)/3
+```
+
+The difference values for each exposure type can be found in the Appendix section of this report. It is important to note that if we have positive values, that means the count for the exposure type mentioned first is higher than what it is being compared to. **Tables 20-22** in the appendix section include the tables that we will be analyzing below.
+
+To begin, if we refer to *Table 20* in the appendix section, we will see that it shows us that the active close-contact cases were greater than the close-contact Active cases. The value of **`r outbreak_contact_recov_act_diff`** tells us that recovered outbreak cases were **`r outbreak_contact_recov_act_diff`** less than active close-contact cases. Deceased close contact cases were also greater than recovered outbreak cases, differing by **`r outbreak_contact_recov_dec_diff`**. Additionally, deceased close contact cases were also greater than active outbreak cases by **`r outbreak_contact_act_dec_diff`**. The average difference between the close outbreak cases and close contact cases differs by **`r outbreak_contact_diff`**. Since the average difference value is negative, we can safely assume that close-contact cases are of more concern when compared to outbreak cases, as they outweigh the case counts in all three categories.
+
+Next, we will refer to *Table 21* in the appendix section. This table shows us the outbreak cases vs travel-related cases. Notice that the recovered outbreak cases are greater than the active travel-related cases by a factor of **`r outbreak_travel_recov_act_diff`**. The recovered outbreak cases are also greater than the deceased travel-related cases by **`r outbreak_travel_recov_dec_diff`**. On the other hand, the active outbreak cases are less than the deceased travel-related cases, and they differ by **`r contact_travel_act_dec_diff`**. This means that the outbreak cases outweigh travel-related cases for the number of recovered cases, but travel-related cases have more deaths in comparison to outbreak cases. The average difference between outbreak cases and travel-related cases is **`r outbreak_travel_diff`**. Since this value is positive, we can safely assume that although travel-related cases had more deaths than the outbreak cases, outbreak cases were far greater and had a larger impact.
+
+Lastly, we will compare the close-contact cases with the travel-related cases. If we refer to *Table 22* in the appendix section, we can notice that all the values are positive. In particular, we can conclude that recovered close-contact cases are greater than the active and deceased travel-related cases, and the active close-contact cases are greater than the deceased travel-related cases. These are by factors of **`r contact_travel_recov_act_diff`**, **`r contact_travel_ecov_dec_diff`**, and **`r contact_travel_act_dec_diff`**, respectively. The average difference between close-contact cases and travel-related cases is **`r contact_travel_diff`**. Since this value is positive and quite large, we can safely assume that close-contact cases are of much more concern than travel-related cases.
+
+Overall, the average difference between the outbreak differences vs. close-contact difference vs travel-related difference is **`r avg_diff_exp`**. Since this is a positive value, we can conclude that the close-contact cases still outweigh the other exposure types.
+
+```{r include=FALSE}
+overall_diff <- avg_diff_exp_case - avg_diff_exp
+```
+
+Lastly, if we compare the overall differences from both of our findings, we can see that we have difference value of **`r overall_diff`**. This tells us that recovered cases, and in particular, close-contact cases are of most concern as the value is still positive, and our previous findings confirmed these results.
+
+All analysis for this report was programmed using `R version 4.0.5`.
+
+## Models
+
+Since we have 3 exposure types, 3 models were created to determine the significant factors for each exposure type. These factors are outlined below.
+
+```{r include=FALSE}
+#regression
+outbreak_age <- as.factor(outbreak_data$age_group)
+outbreak_model <- glmer(as.factor(health_region) ~ (1|outbreak_age) + as.factor(gender) + as.factor(case_status), family = binomial, data=outbreak_data)
+summary(outbreak_model)
+```
+
+```{r echo=FALSE}
+outbreak_model_table <- data.frame(
+  Factor = c("as.factor(gender)Male", "as.factor(case_status)Deceased", "as.factor(case_status)Recovered"),
+  Estimate = c(
+    "0.19962",
+    "-0.38133",
+    "-0.41930"),
+  Pvalue = c(
+    "0.0000000237",
+    "0.0956",
+    "0.0468"),
+  Significance = c(
+    "***",
+    " ",
+    "*")
+)
+
+kbl(outbreak_model_table, caption = "Outbreak Model Statistics", booktabs = T) %>%
+  kable_classic(full_width = F, position = "center",  latex_options = "HOLD_position") %>% 
+  column_spec(2, width = "10em")
+```
+
+The table above models the outbreak cases. We can see that there are two significant factors that affect the health region of outbreak cases, based on our intercept, age group. These factors are the following: individuals who are male and whose case status is recovered. Notice that being male is more significant than case status being recovered. This means that COVID-19 cases across health regions have higher male counts than female counts. Although our data earlier in this report showed us that female case counts were higher overall, when broken down by health region, we can now see that male case counts are of more significance. This is not shocking as we discussed, in the introduction section of this report, how males are more prone to getting sick.
+
+Case status being recovered is also of significance. This is because most COVID-19 cases result in an individual fully recovering after testing positive for the virus. Keeping track of this metric between the health regions is important as it allows us to see that although cases may spike, the measures being taken are probably working as the government aims to reduce the amount of deceased and active cases overall.
+
+```{r include=FALSE}
+travel_age <- as.factor(travel_related_data$age_group)
+travel_model <- glmer(as.factor(health_region) ~ (1|travel_age) + as.factor(gender) + as.factor(case_status), family = binomial, data=travel_related_data)
+summary(travel_model)
+```
+
+```{r echo=FALSE}
+travel_model_table <- data.frame(
+  Factor = c("as.factor(gender)Male", "as.factor(case_status)Deceased", "as.factor(case_status)Recovered"),
+  Estimate = c(
+    "0.2493",
+    "-1.4243",
+    "-0.3552"),
+  Pvalue = c(
+    "0.0237",
+    "0.0822",
+    "0.6224"),
+  Significance = c(
+    "*",
+    " ",
+    " ")
+)
+
+kbl(travel_model_table, caption = "Travel-Related Model Statistics", booktabs = T) %>%
+  kable_classic(full_width = F, position = "center",  latex_options = "HOLD_position") %>% 
+  column_spec(2, width = "10em")
+```
+
+The table above models the travel-related cases. We can see that there is only one significant factor that affects the health region of travel-related cases, based on our intercept, age group. That factor consists of individuals who are male. This means that travel-related COVID-19 cases across health regions have higher male counts than female counts. This may mean that there are more men who are travelling within and outside of Ontario, whether this be for business trips or leisure. Again, this significance is not shocking as we discussed, in the introduction section of this report, how males are more prone to contracting diseases and getting sick in general.
+
+```{r include=FALSE}
+contact_age <- as.factor(close_contact_data$age_group)
+contact_model <- glmer(as.factor(health_region) ~ (1|contact_age) + as.factor(gender) + as.factor(case_status), family = binomial, data=close_contact_data)
+summary(contact_model)
+```
+
+```{r echo=FALSE}
+contact_model_table <- data.frame(
+  Factor = c("as.factor(gender)Male", "as.factor(case_status)Deceased", "as.factor(case_status)Recovered"),
+  Estimate = c(
+    "0.03919",
+    "-0.26869",
+    "-0.23261"),
+  Pvalue = c(
+    "0.030296",
+    "0.066723",
+    "0.000956"),
+  Significance = c(
+    "*",
+    " ",
+    "***")
+)
+
+kbl(contact_model_table, caption = "Close-Contact Model Statistics", booktabs = T) %>%
+  kable_classic(full_width = F, position = "center",  latex_options = "HOLD_position") %>% 
+  column_spec(2, width = "10em")
+```
+
+The table above models the close-contact cases. We can see that there are two significant factors that affect the health regions of close-contact cases, based on our intercept, age group. These factors consist of the following: individuals who are male and individuals who have recovered from COVID-19. Notice that the recovered category is more significant than being male. This means that close-contact COVID-19 cases across health regions have higher recovery rates than the other exposure cases. As mentioned earlier, this is because most COVID-19 cases result in an individual fully recovering after testing positive for the virus. Keeping track of this metric between the health regions is important as it allows us to see that although cases may spike, the measures being taken are probably working as the government aims to reduce the amount of deceased and active cases overall.
+
+Individuals who are male and contract the virus are also a significant measure as it align with our earlier hypothesis that males are more prone to getting sick and contracting diseases or viruses. As mentioned earlier, although our data in this report showed us that female case counts were higher overall, when broken down by health region, we can now see that male case counts are of more significance.
+
+Taking the factors of significance from our models into consideration with our difference in differences methodology, we can safely derive a conclusion related to our hypothesis and research question. 
+
+# Conclusion
+
+Recall that the goal of this study was to determine what exposure type has a greater effect on the number of COVID-19 cases across Canada by looking at the differences between case status counts based off of each exposure type. To delve deeper into the data, the factors that contributed to higher case counts were analyzed and their significance was also determined. We had hypothesized that the close-contact cases would be of of greatest concern as it is harder to ensure that individuals across the country will not interact with each other despite lockdown restrictions. 
+
+To determine which exposure type is of greatest concern based off of the case status, the difference in differences methodology was applied to the data. After completing the difference in difference method, a multilevel logistic regression model was created. This model was used to deduce which factors, such as gender, case status, age, etc., were significant contributors to COVID-19 cases across hot spot regions in Ontario. Recall that the reason multilevel logistic regression (MLS) was used is because we are able to compare the dependent variable based on changes in other variables, and COVID-19 cases based on health regions and exposure types are associated with various other factors and not just one.
+
+The models that were created, as seen in **Table's 23-25**, were then analyzed with their respective summaries. The results found from the MLS model can be compared to our results from the difference in differences method, and we can see that there is some overlap. In particular, we can conclude that our hypothesis was correct, as close-contact cases make up the greatest number of cases overall, and in parallel, make up the highest number of recovered cases. High recovery rates correlate with high contraction rates, which was also shown in our difference in differences models. We saw that recovered close-contact cases are greater when compared to recovered, active, and deceased close-contact, travel-related, and outbreak cases. This in itself already tells us that close-contact cases are very high. All of our difference in difference data showed very high close-contact results, whether that was through comparing case statuses or comparing case differences between exposure types.
+
+Additionally, when we ran our MLS model's, we found that the most significant factor in two out of three of our exposure types was recovered cases and the individuals gender being a male. Recovered cases were significant in the close-contact model which aligns with our findings from the difference in differences method. The significance of males having higher case counts across hot spot regions aligns with our research presented in the introduction of this report, which outlines that males are more susceptible to contracting diseases and viruses as they are more prone to having underlying health conditions.
+
+That being said, there were a few drawbacks that affected the results of this study, including but not limited to the following:
+
+1. Lack Individual Health Data 
+
+As mentioned various times throughout this report, underlying health conditions make an individual more prone to contracting COVID-19. Additionally, we found that people of colour are more often affected by these underlying health conditions. Unfortunately, the data we used did not provide a any ethnic related/racial background or whether or not individuals had underlying health conditions. This data would have aided our study since it would provide us more reasoning as to why certain case statuses had more or less case counts than others. It would provide more concrete reasoning for why or how an individual contracted the disease and how it affected their recovery or resulted in their death, and in return would give more accurate results.
+
+2. Lack of Vaccination Data
+
+Additionally, there was no vaccination data present in our data set which could have been the reason for the high recovery cases present. Not knowing if an individual was vaccinated leaves room for errored judgement as it is one of the prime factors currently contributing to keeping individuals out of the intensive care unit's (ICU's) and being hospitalized in general. We had very high recovery cases, but we do not know if these are a result of individuals being able to fight off the virus, or if it is a result of being vaccinated. Vaccine roll out in Ontario began early 2021, which is where we saw spikes and dips in overall case counts. The question then arises is how would the data look difference if the vaccine was not being administered at all? Would this affect the case counts? Have individuals in this data set been vaccinated or is this data independent of individuals who received the vaccine? These are all important questions that could not be answered due to the lack of data present in the data set.
+
+3. Inconsistency of Data Across Provinces
+
+Lastly, after we had cleansed the data, we found that all entries from British Columbia and Alberta had been removed. This was a result of inconsistencies in the data. These inconsistencies made it difficult to do further analysis since a lot of the variables our study depended on did not have the information needed for those provinces. Thus, the study only ended up looking at COVID-19 cases in Ontario, which may have skewed our results as we were not able to hone in on all areas of interest.
+
+In conclusion, with the data that we had, we can safely say that the exposure type of most concern is close-contact exposure. Although the Ontario government continues to attempt decreasing the case counts by introducing new lockdowns, it seems that they are not as effective as counts have reached their peak in late 2020 and early 2021. It is important for the Government of Ontario to begin considering alternative measures, inclusive of the already existing lockdowns, in order to ensure the reduction of cases due to close-contact exposure. 
+
+\newpage
+
+# Bibliography
+
+1. Public Health Agency of Canada. (2021, June 15). *Coronavirus disease (COVID-19): Outbreak update.* Canada.ca. [https://www.canada.ca/en/public-health/services/diseases/2019-novel-coronavirus-infection.html](https://www.canada.ca/en/public-health/services/diseases/2019-novel-coronavirus-infection.html) 
+
+2. Staff, Reuters. (2021, June 14). Delta variant doubles risk of Covid-19 hospitalization, Scottish study finds. *CTV News.* [https://www.ctvnews.ca/health/coronavirus/delta-variant-doubles-risk-of-covid-19-hospitalization-scottish-study-finds-1.5469812](https://www.ctvnews.ca/health/coronavirus/delta-variant-doubles-risk-of-covid-19-hospitalization-scottish-study-finds-1.5469812]) 
+
+3. Judd, A. (2021, June 15). *COVID Delta variant a 'concern' but not spreading rapidly: B.C. officials.* Global News. [https://globalnews.ca/news/7948442/covid-delta-variant-bc-concerns/](https://globalnews.ca/news/7948442/covid-delta-variant-bc-concerns/)
+
+4. CBC/Radio Canada. (2021, June 14). *Outbreaks of delta variant spark concern at Calgary hospital | CBC News.* CBCnews. [https://www.cbc.ca/news/canada/calgary/foothills-delta-variant-outbreak-calgary-covid-1.6063802](https://www.cbc.ca/news/canada/calgary/foothills-delta-variant-outbreak-calgary-covid-1.6063802) 
+
+5. (2021, June 2). *Government of Canada / Gouvernement du Canada.* Government of Canada, Canada Border Services Agency. [https://www.cbsa-asfc.gc.ca/services/covid/menu-eng.html](https://www.cbsa-asfc.gc.ca/services/covid/menu-eng.html) 
+
+6. Turnbull, S., & Dunham, J. (2021, April 22). Canada imposes ban on passenger flights from India, Pakistan for 30 days. *CTV News.* [https://www.ctvnews.ca/politics/canada-imposes-ban-on-passenger-flights-from-india-pakistan-for-30-days-1.5397839](https://www.ctvnews.ca/politics/canada-imposes-ban-on-passenger-flights-from-india-pakistan-for-30-days-1.5397839)
+
+7. Katawazi, M. (2021, April 8). Full list of Ontario neighbourhoods where the Covid-19 vaccine will be available to those 18+. *CTV News.* [https://toronto.ctvnews.ca/full-list-of-ontario-neighbourhoods-where-the-covid-19-vaccine-will-be- available-to-those-18-1.5379755](https://toronto.ctvnews.ca/full-list-of-ontario-neighbourhoods-where-the-covid-19-vaccine-will-be- available-to-those-18-1.5379755 )
+
+8. Freeman, J. (2021, April 26). Toronto announces first workplace closures due to Covid-19 outbreaks of five or more. *CTV News.* [https://toronto.ctvnews.ca/toronto-announces-first-workplace-closures-due-to-covid-19-outbreaks-of- five-or-more-1.5402149](https://toronto.ctvnews.ca/toronto-announces-first-workplace-closures-due-to-covid-19-outbreaks-of- five-or-more-1.5402149)
+
+9. Public Health Agency of Canada. (2021, May 28). *COVID-19 daily epidemiology update.* Government of Canada. [https://health-infobase.canada.ca/covid-19/epidemiological-summary-covid-19-cases.html](https://health-infobase.canada.ca/covid-19/epidemiological-summary-covid-19-cases.html
+
+10. *Outbreaks, epidemics and pandemics—what you need to know - APIC.* (2014). APIC. [https://apic.org/monthly_alerts/outbreaks-epidemics-and-pandemics-what-you-need-to-know/](https://apic.org/monthly_alerts/outbreaks-epidemics-and-pandemics-what-you-need-to-know/). 
+
+11. *Close contacts.* (2019). Bccdc.ca. [http://www.bccdc.ca/health-info/diseases-conditions/covid-19/self-isolation/close-contacts](http://www.bccdc.ca/health-info/diseases-conditions/covid-19/self-isolation/close-contacts
+
+12. *Case Definition -Coronavirus Disease (COVID-19) A. Probable Case. (n.d.).* Retrieved June 20, 2021, from [https://www.health.gov.on.ca/en/pro/programs/publichealth/coronavirus/docs/2019_case_definition.pdf](https://www.health.gov.on.ca/en/pro/programs/publichealth/coronavirus/docs/2019_case_definition.pdf)
+
+13. Bjørn Kallerud. (2019, September 24). *Format captions in kableExtra().* Stack Overflow. [https://stackoverflow.com/questions/58087931/format-captions-in-kableextra](https://stackoverflow.com/questions/58087931/format-captions-in-kableextra)
+
+14. *Confirmed positive cases of COVID-19 in Ontario - Ontario Data Catalogue.* (2019). Ontario.ca. [https://data.ontario.ca/dataset/confirmed-positive-cases-of-covid-19-in-ontario](https://data.ontario.ca/dataset/confirmed-positive-cases-of-covid-19-in-ontario)
+
+15. *BC COVID-19 Data.* (2019). Bccdc.ca. [http://www.bccdc.ca/health-info/diseases-conditions/covid-19/data](http://www.bccdc.ca/health-info/diseases-conditions/covid-19/data)
+
+16. *COVID-19 Alberta statistics.* (2021). Alberta.ca. [https://www.alberta.ca/stats/covid-19-alberta-statistics.htm](https://www.alberta.ca/stats/covid-19-alberta-statistics.htm)
+
+17. ccodwg. (2021, June 20). *ccodwg/Covid19Canada.* GitHub. [https://github.com/ccodwg/Covid19Canada](https://github.com/ccodwg/Covid19Canada)
+
+18. *Why is COVID-19 more severely affecting people of color?* (2020). Mayo Clinic; [https://www.mayoclinic.org/diseases-conditions/coronavirus/expert-answers/coronavirus-infection-by-race/faq-20488802](https://www.mayoclinic.org/diseases-conditions/coronavirus/expert-answers/coronavirus-infection-by-race/faq-20488802)
+
+19. John, C. (2016, November 18). *Center Plot title in ggplot2.* Stack Overflow. [https://stackoverflow.com/questions/40675778/center-plot-title-in-ggplot2](https://stackoverflow.com/questions/40675778/center-plot-title-in-ggplot2)
+
+20. cs0815. (2018, October 11). *avoid scientific notation x axis ggplot.* Stack Overflow. [https://stackoverflow.com/questions/52758313/avoid-scientific-notation-x-axis-ggplot](https://stackoverflow.com/questions/52758313/avoid-scientific-notation-x-axis-ggplot)
+
+21. CDC. (2020, February 11). *Older Adults and COVID-19.* Centers for Disease Control and Prevention. [https://www.cdc.gov/coronavirus/2019-ncov/need-extra-precautions/older-adults.html#:~:text=Increased%20Risk%2%20Older%20adults%20are&text=The%20risk%20increases%20for%20people,having%20certain%20underlying%20medical%](https://www.cdc.gov/coronavirus/2019-ncov/need-extra-precautions/older-adults.html#:~:text=Increased%20Risk%2%20Older%20adults%20are&text=The%20risk%20increases%20for%20people,having%20certain%20underlying%20medical%)
+
+22. Sophiah Ho. (2020, April 26). *Ontario COVID-19 data visualizations of confirmed cases.* COVID-19 Dashboards. [https://covid19dashboards.com/ontario-confirmed-cases-per-region/](https://covid19dashboards.com/ontario-confirmed-cases-per-region/)
+
+23. Bwire G. M. (2020). Coronavirus: Why Men are More Vulnerable to Covid-19 Than Women?. *SN comprehensive clinical medicine,* 1–3. Advance online publication. [https://doi.org/10.1007/s42399-020-00341-w](https://doi.org/10.1007/s42399-020-00341-w)
+
+24. Zhu, H. (n.d.). *Create Awesome LaTeX Table with knitr::kable and kableExtra.* Retrieved June 20, 2021, from [https://cran.r-project.org/web/packages/kableExtra/vignettes/awesome_table_in_pdf.pdf](https://cran.r-project.org/web/packages/kableExtra/vignettes/awesome_table_in_pdf.pdf)
+
+25. amices. (2020, October 2).* Error: No tidy methods for objects of class glmerMod · Issue #274 · amices/mice.* GitHub. [https://github.com/amices/mice/issues/274](https://github.com/amices/mice/issues/274)
+
+26.Nielsen, K. (2020, April 24). *A timeline of COVID-19 in Ontario.* Global News; Global News. [https://globalnews.ca/news/6859636/ontario-coronavirus-timeline/](https://globalnews.ca/news/6859636/ontario-coronavirus-timeline/)
+
+27. Public Health Agency of Canada. (2020). *Coronavirus disease (COVID-19): Symptoms and treatment - Canada.ca.* Canada.ca. [https://www.canada.ca/en/public-health/services/diseases/2019-novel-coronavirus-infection/symptoms.html](https://www.canada.ca/en/public-health/services/diseases/2019-novel-coronavirus-infection/symptoms.html)
+
+\newpage
+
+# Appendix
+
+Below is a glimpse of the data and additional plots and summaries that are used throughout the report but not significant enough to keep in the main sections.
+
+**a) Glimpse of Original Data**
+```{r echo=FALSE}
+glimpse(covid_data)
+```
+
+This data set can be found using the following link: 
+[https://resources-covid19canada.hub.arcgis.com/datasets/covid19canada::compiled-covid-19-case-details-canada/explore](https://resources-covid19canada.hub.arcgis.com/datasets/covid19canada::compiled-covid-19-case-details-canada/explore)
+
+**b) Glimpse of Cleansed Data**
+```{r echo=FALSE}
+glimpse(ON_data)
+```
+
+**c) Case Differences Between Case Statuses (Grouped by Exposure Type)**
+```{r echo=FALSE}
+outbreak_case_differences <- data.frame(Status = c("Recovered vs. Active",
+                                     "Recovered vs. Deceased",
+                                     "Active vs. Deceased"),
+                      Count = c(outbreak_recov_act_diff,
+                        outbreak_recov_dec_diff,
+                        outbreak_act_dec_diff))
+kbl(outbreak_case_differences, caption = "Outbreak Case Differences Between Case Status", booktabs = T) %>%
+  kable_classic(full_width = F, position = "center",  latex_options = "HOLD_position") %>% 
+  column_spec(2, width = "10em")
+
+contact_case_differences <- data.frame(Status = c("Recovered vs. Active",
+                                     "Recovered vs. Deceased",
+                                     "Active vs. Deceased"),
+                      Count = c(contact_recov_act_diff,
+                        contact_recov_dec_diff,
+                        contact_act_dec_diff))
+kbl(contact_case_differences, caption = "Close-Contact Case Differences Between Case Status", booktabs = T) %>%
+  kable_classic(full_width = F, position = "center",  latex_options = "HOLD_position") %>% 
+  column_spec(2, width = "10em")
+
+
+travel_case_differences <- data.frame(Status = c("Recovered vs. Active",
+                                     "Recovered vs. Deceased",
+                                     "Active vs. Deceased"),
+                      Count = c(travel_recov_act_diff,
+                        travel_recov_dec_diff,
+                        travel_act_dec_diff))
+kbl(travel_case_differences, caption = "Travel-Related Case Differences Between Case Status", booktabs = T) %>%
+  kable_classic(full_width = F, position = "center",  latex_options = "HOLD_position") %>% 
+  column_spec(2, width = "10em")
+```
+
+**d) Case Differences Between Exposure Types **
+```{r echo=FALSE}
+outbreak_contact_diff <- data.frame(Exposure = c("Outbreak vs Close-Contact",
+                                                 "Outbreak vs Close-Contact",
+                                                 "Outbreak vs Close-Contact"),
+                                    Status = c("Recovered vs. Active",
+                                                 "Recovered vs. Deceased",
+                                                 "Active vs. Deceased"),
+                      Count = c(outbreak_contact_recov_act_diff,
+                        outbreak_contact_recov_dec_diff,
+                        outbreak_contact_act_dec_diff))
+kbl(outbreak_contact_diff, caption = "Outbreak vs Close-Contact Case Differences", booktabs = T) %>%
+  kable_classic(full_width = F, position = "center",  latex_options = "HOLD_position") %>% 
+  column_spec(3, width = "15em")
+
+outbreak_travel_diff <- data.frame(Exposure = c("Outbreak vs Travel-Related",
+                                                 "Outbreak vs Travel-Related",
+                                                 "Outbreak vs Travel-Related"),
+                                    Status = c("Recovered vs. Active",
+                                                 "Recovered vs. Deceased",
+                                                 "Active vs. Deceased"),
+                      Count = c(outbreak_travel_recov_act_diff,
+                        outbreak_travel_recov_dec_diff,
+                        outbreak_travel_act_dec_diff))
+kbl(outbreak_travel_diff, caption = "Outbreak vs Travel-Related Case Differences", booktabs = T) %>%
+  kable_classic(full_width = F, position = "center",  latex_options = "HOLD_position") %>% 
+  column_spec(3, width = "15em")
+
+contact_travel_diff <- data.frame(Exposure = c("Close-Contact vs Travel-Related",
+                                                 "Close-Contact vs Travel-Related",
+                                                 "Close-Contact vs Travel-Related"),
+                                    Status = c("Recovered vs. Active",
+                                                 "Recovered vs. Deceased",
+                                                 "Active vs. Deceased"),
+                      Count = c(contact_travel_recov_act_diff,
+                        contact_travel_ecov_dec_diff,
+                        contact_travel_act_dec_diff))
+kbl(contact_travel_diff, caption = "Close-Contact vs Travel-Related Case Differences", booktabs = T) %>%
+  kable_classic(full_width = F, position = "center",  latex_options = "HOLD_position") %>% 
+  column_spec(3, width = "15em")
+```
